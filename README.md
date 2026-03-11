@@ -10,7 +10,7 @@
 
 ## Requirements
 - macOS
-- Burp Suite + Jython (for Python extension)
+- Burp Suite
 - Node.js (for launcher)
 
 ## Installation
