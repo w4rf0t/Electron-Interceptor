@@ -20,18 +20,13 @@
    cd Electron-Interceptor && npm install
    cd overrides/js && npm install
    ```
-2. Configure Jython in Burp:
-   - Burp → Extensions → Options → Python environment → Location of Jython standalone JAR ([download Jython](https://www.jython.org/download))
-3. Load the extension:
-   - Extensions → Add → Extension type: Python
-   - Extension file: electron_interceptor.py
-4. Export Burp CA certificate:
+2. Export Burp CA certificate:
    - Burp → Proxy → Options → Import/export CA certificate → Export → Certificate in DER format (cacert.der)
    - Convert to PEM if needed:
      ```bash
      openssl x509 -inform DER -in cacert.der -out cacert.pem
      ```
-5. Make sure Burp Proxy is listening (e.g., 127.0.0.1:8080)
+3. Make sure Burp Proxy is listening (e.g., 127.0.0.1:8080)
 
 ## Usage
 1. Open the Electron Interceptor tab in Burp.
