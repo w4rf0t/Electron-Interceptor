@@ -1,0 +1,9 @@
+{
+  "name": "intercept-js-overrides",
+  "private": true,
+  "dependencies": {
+    "global-agent": "^3.0.0",
+    "global-tunnel-ng": "^2.7.1",
+    "undici": "^5.0.0"
+  }
+}

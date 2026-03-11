@@ -1,0 +1,9 @@
+{
+  "name": "intercept-extension",
+  "private": true,
+  "description": "Electron interceptor launcher for Burp Suite (CDP injection)",
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.2",
+    "portfinder": "^1.0.32"
+  }
+}
