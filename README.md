@@ -16,6 +16,7 @@
 ## Installation
 1. Install dependencies for the launcher:
    ```bash
+   git clone https://github.com/w4rf0t/Electron-Interceptor.git
    cd Electron-Interceptor && npm install
    cd overrides/js && npm install
    ```
