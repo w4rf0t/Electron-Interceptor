@@ -39,7 +39,7 @@
 
 ### Run launcher from terminal (CLI)
 ```bash
-cd intercept-extension
+cd ../../Electron-Interceptor
 node launcher.js --app "/Applications/YourElectronApp.app" --proxy 127.0.0.1:8080 --cert /path/to/cacert.pem
 ```
 
