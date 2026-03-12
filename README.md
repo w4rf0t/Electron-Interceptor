@@ -19,6 +19,7 @@
    git clone https://github.com/w4rf0t/Electron-Interceptor.git
    cd Electron-Interceptor && npm install
    cd overrides/js && npm install
+   cd ../..
    ```
 2. Export Burp CA certificate:
    - Burp → Proxy → Options → Import/export CA certificate → Export → Certificate in DER format (cacert.der)
@@ -39,7 +40,6 @@
 
 ### Run launcher from terminal (CLI)
 ```bash
-cd ../..
 node launcher.js --app "/Applications/YourElectronApp.app" --proxy 127.0.0.1:8080 --cert /path/to/cacert.pem
 ```
 
