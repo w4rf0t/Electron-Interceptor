@@ -6,6 +6,8 @@
 
 ## Features
 - Injects proxy and CA certificate into both Chromium (renderer) and Node (main process) of Electron apps.
+- Adds a runtime fallback that reroutes `globalThis.fetch` in Electron main process to `electron.net.fetch` when needed.
+- Enforces proxy at `session.defaultSession.setProxy(...)` as a safety-net if command-line proxy is ignored.
 - Enables security testing and HTTPS traffic analysis.
 
 ## Requirements
@@ -19,18 +21,13 @@
    cd intercept-extension && npm install
    cd overrides/js && npm install
    ```
-2. Configure Jython in Burp:
-   - Burp → Extensions → Options → Python environment → Location of Jython standalone JAR ([download Jython](https://www.jython.org/download))
-3. Load the extension:
-   - Extensions → Add → Extension type: Python
-   - Extension file: electron_interceptor.py
-4. Export Burp CA certificate:
+2. Export Burp CA certificate:
    - Burp → Proxy → Options → Import/export CA certificate → Export → Certificate in DER format (cacert.der)
    - Convert to PEM if needed:
      ```bash
      openssl x509 -inform DER -in cacert.der -out cacert.pem
      ```
-5. Make sure Burp Proxy is listening (e.g., 127.0.0.1:8080)
+3. Make sure Burp Proxy is listening (e.g., 127.0.0.1:8080)
 
 ## Usage
 1. Open the Electron Interceptor tab in Burp.
@@ -47,11 +44,17 @@ cd intercept-extension
 node launcher.js --app "/Applications/YourElectronApp.app" --proxy 127.0.0.1:8080 --cert /path/to/cacert.pem
 ```
 
+Disable fetch fallback (if target app is sensitive to fetch monkey-patching):
+```bash
+node launcher.js --app "/Applications/YourElectronApp.app" --proxy 127.0.0.1:8080 --cert /path/to/cacert.pem --no-fetch-fallback
+```
+
 ## Troubleshooting
 - Requests not showing in Burp: check scope, filter, TLS Pass Through, proxy-bypass-list.
 - Requests to localhost/127.0.0.1: bypassed by default, use `--no-bypass` to intercept.
 - Health check failed: not a proxy error, just API returns non-2xx.
 - "No such file or directory" error when launching: provide full path to Node.
+- Some apps still bypass proxy in custom/native code paths: this extension can only patch JS/Electron paths, not arbitrary native transports.
 
 ## Notes
 - For security testing of your own apps or with permission only.

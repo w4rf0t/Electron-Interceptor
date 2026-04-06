@@ -15,7 +15,13 @@ const PREPEND_ELECTRON_PATH = path.join(OVERRIDES_DIR, 'js', 'prepend-electron.j
 
 function parseArgs() {
   const args = process.argv.slice(2);
-  const opts = { proxyHost: '127.0.0.1', proxyPort: '8080', certPath: '' };
+  const opts = {
+    proxyHost: '127.0.0.1',
+    proxyPort: '8080',
+    certPath: '',
+    extraCerts: [],
+    fetchFallback: true,
+  };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--app' && args[i + 1]) {
       opts.appPath = args[++i].replace(/\/+$/, '');
@@ -26,8 +32,12 @@ function parseArgs() {
       if (p) opts.proxyPort = p;
     } else if (args[i] === '--cert' && args[i + 1]) {
       opts.certPath = args[++i];
+    } else if (args[i] === '--extra-cert' && args[i + 1]) {
+      opts.extraCerts.push(args[++i]);
     } else if (args[i] === '--no-bypass') {
       opts.noBypass = true;
+    } else if (args[i] === '--no-fetch-fallback') {
+      opts.fetchFallback = false;
     }
   }
   return opts;
@@ -95,32 +105,66 @@ function getPort(port) {
   }
 }
 
-function loadCertParams(certPath) {
-  if (!certPath || !canAccess(certPath)) {
-    return { newlineEncodedCertData: '', spkiFingerprint: '' };
-  }
-  const certPem = fs.readFileSync(path.resolve(certPath), 'utf8');
-  const newlineEncodedCertData = certPem.replace(/\r\n|\r|\n/g, '\\n');
-  let spkiFingerprint = '';
+function extractPemCerts(fileContent) {
+  const certs = [];
+  const re = /-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g;
+  let m;
+  while ((m = re.exec(fileContent)) !== null) certs.push(m[0]);
+  return certs;
+}
+
+function computeSpki(certPem) {
   try {
     if (typeof crypto.X509Certificate === 'function') {
       const x509 = new crypto.X509Certificate(certPem);
       const spkiDer = x509.publicKey.export({ type: 'spki', format: 'der' });
-      spkiFingerprint = crypto.createHash('sha256').update(spkiDer).digest('base64');
+      return crypto.createHash('sha256').update(spkiDer).digest('base64');
     } else {
       const key = crypto.createPublicKey({ key: certPem, format: 'pem' });
       const spkiDer = key.export({ type: 'spki', format: 'der' });
-      spkiFingerprint = crypto.createHash('sha256').update(spkiDer).digest('base64');
+      return crypto.createHash('sha256').update(spkiDer).digest('base64');
     }
   } catch (e) {
     console.warn('Could not compute SPKI fingerprint:', e.message);
+    return '';
   }
-  return { newlineEncodedCertData, spkiFingerprint };
+}
+
+function loadCertParams(certPath, extraCertPaths) {
+  const allPems = [];
+
+  if (certPath && canAccess(certPath)) {
+    const content = fs.readFileSync(path.resolve(certPath), 'utf8');
+    allPems.push(...extractPemCerts(content));
+  }
+  for (const p of (extraCertPaths || [])) {
+    if (canAccess(p)) {
+      const content = fs.readFileSync(path.resolve(p), 'utf8');
+      allPems.push(...extractPemCerts(content));
+    }
+  }
+
+  if (allPems.length === 0) {
+    return { certDataList: [], spkiFingerprint: '', combinedCertPath: '' };
+  }
+
+  const certDataList = allPems.map((pem) => pem.replace(/\r\n|\r|\n/g, '\\n'));
+  const spkiList = allPems.map(computeSpki).filter(Boolean);
+  const spkiFingerprint = spkiList.join(',');
+
+  let combinedCertPath = certPath ? path.resolve(certPath) : '';
+  if (extraCertPaths && extraCertPaths.length > 0) {
+    combinedCertPath = path.join(__dirname, '.combined-ca.pem');
+    fs.writeFileSync(combinedCertPath, allPems.join('\n') + '\n');
+    console.log('Combined CA file:', combinedCertPath, `(${allPems.length} certs)`);
+  }
+
+  return { certDataList, spkiFingerprint, combinedCertPath };
 }
 
 async function runWithCDP(options) {
-  const { cmd, proxyUrl, certPath, debugPort, noBypass } = options;
-  const certParams = loadCertParams(certPath);
+  const { cmd, proxyUrl, certPath, extraCerts, debugPort, noBypass, fetchFallback } = options;
+  const certParams = loadCertParams(certPath, extraCerts);
   const proxyBypassList = noBypass ? '' : '<-loopback>';
 
   const env = {
@@ -135,7 +179,9 @@ async function runWithCDP(options) {
     HTTP_TOOLKIT_ACTIVE: 'true',
     NODE_OPTIONS: '',
   };
-  if (certPath && canAccess(certPath)) {
+  if (certParams.combinedCertPath) {
+    env.NODE_EXTRA_CA_CERTS = certParams.combinedCertPath;
+  } else if (certPath && canAccess(certPath)) {
     env.NODE_EXTRA_CA_CERTS = path.resolve(certPath);
   }
 
@@ -176,11 +222,29 @@ async function runWithCDP(options) {
   await debugClient.Runtime.runIfWaitingForDebugger();
   const callFrameId = await callFramePromise;
 
-  const expression = `require(${JSON.stringify(PREPEND_ELECTRON_PATH)})({
-    newlineEncodedCertData: ${JSON.stringify(certParams.newlineEncodedCertData)},
-    spkiFingerprint: ${JSON.stringify(certParams.spkiFingerprint)},
-    proxyBypassList: ${JSON.stringify(proxyBypassList)}
-  })`;
+  const expression = `(() => {
+    const __interceptRequire = (function getCompatRequire() {
+      if (typeof globalThis.require === 'function') return globalThis.require;
+      try {
+        const mod = process.getBuiltinModule && process.getBuiltinModule('module');
+        if (mod && typeof mod.createRequire === 'function') {
+          return mod.createRequire(process.cwd() + '/__electron_interceptor__.cjs');
+        }
+      } catch (e) {
+        process.stderr.write('[ELECTRON-INTERCEPT] createRequire bootstrap failed: ' + e.message + '\\n');
+      }
+      return null;
+    })();
+    if (!__interceptRequire) {
+      throw new Error('No compatible require() available in this ESM frame');
+    }
+    return __interceptRequire(${JSON.stringify(PREPEND_ELECTRON_PATH)})({
+      certDataList: ${JSON.stringify(certParams.certDataList)},
+      spkiFingerprint: ${JSON.stringify(certParams.spkiFingerprint)},
+      proxyBypassList: ${JSON.stringify(proxyBypassList)},
+      enableFetchFallback: ${JSON.stringify(fetchFallback !== false)}
+    });
+  })()`;
 
   const result = await debugClient.Debugger.evaluateOnCallFrame({ callFrameId, expression });
   if (result.exceptionDetails) {
@@ -195,7 +259,7 @@ async function runWithCDP(options) {
 async function main() {
   const opts = parseArgs();
   if (!opts.appPath) {
-    console.error('Usage: node launcher.js --app /path/to/Electron.app [--proxy 127.0.0.1:8080] [--cert /path/to/cacert.pem] [--no-bypass]');
+    console.error('Usage: node launcher.js --app /path/to/Electron.app [--proxy 127.0.0.1:8080] [--cert /path/to/cacert.pem] [--extra-cert /path/to/another-ca.pem] [--no-bypass] [--no-fetch-fallback]');
     process.exit(1);
   }
 
@@ -217,8 +281,10 @@ async function main() {
       cmd,
       proxyUrl,
       certPath: opts.certPath,
+      extraCerts: opts.extraCerts,
       debugPort,
       noBypass: opts.noBypass || false,
+      fetchFallback: opts.fetchFallback,
     });
   } catch (err) {
     console.error(err);
