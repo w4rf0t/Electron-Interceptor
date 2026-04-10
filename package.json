@@ -1,0 +1,13 @@
+{
+  "name": "intercept-extension-v2",
+  "version": "2.0.0",
+  "description": "Generic Electron interceptor for Burp Suite - routes all HTTP/HTTPS traffic + IPC hooks",
+  "main": "launcher.js",
+  "scripts": {
+    "test": "node launcher.js --app /Applications/KChat.app --proxy 127.0.0.1:8080 --cert ./cacert.pem"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.2",
+    "portfinder": "^1.0.32"
+  }
+}
