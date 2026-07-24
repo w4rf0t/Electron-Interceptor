@@ -18,7 +18,7 @@
 ## Installation
 1. Install dependencies for the launcher:
    ```bash
-   cd intercept-extension && npm install
+   cd Electron-Interceptor && npm install
    cd overrides/js && npm install
    ```
 2. Export Burp CA certificate:
@@ -40,7 +40,7 @@
 
 ### Run launcher from terminal (CLI)
 ```bash
-cd intercept-extension
+cd Electron-Interceptor
 node launcher.js --app "/Applications/YourElectronApp.app" --proxy 127.0.0.1:8080 --cert /path/to/cacert.pem
 ```
 
@@ -63,7 +63,7 @@ node launcher.js --app "/Applications/YourElectronApp.app" --proxy 127.0.0.1:808
 ## Folder Structure
 
 ```
-intercept-extension/
+Electron-Interceptor/
 ├── README.md
 ├── package.json
 ├── launcher.js               # Launcher CLI: spawn --inspect-brk + CDP inject
